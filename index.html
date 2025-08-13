@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+<meta charset="UTF-8">
+<title>بازی نقطه‌خط مهیار و آرام</title>
+<style>
+    body {
+        font-family: sans-serif;
+        background: linear-gradient(135deg, #ffb6c1, #ffe4e1);
+        text-align: center;
+        direction: rtl;
+    }
+    h1 { color: #d6336c; }
+    #board { display: inline-block; margin-top: 20px; }
+    .dot {
+        width: 12px; height: 12px;
+        background: black; border-radius: 50%;
+        display: inline-block; position: relative;
+    }
+    .h-line, .v-line {
+        background: transparent;
+        cursor: pointer;
+        position: absolute;
+    }
+    .h-line {
+        width: 40px; height: 4px;
+        top: 4px; left: 12px;
+    }
+    .v-line {
+        width: 4px; height: 40px;
+        top: 12px; left: 4px;
+    }
+    .filled { background: #d6336c !important; }
+    .box {
+        width: 40px; height: 40px;
+        position: absolute; top: 12px; left: 12px;
+        text-align: center; line-height: 40px;
+        font-weight: bold;
+        color: white;
+    }
+    button {
+        padding: 10px; margin: 10px; font-size: 16px;
+        border: none; border-radius: 8px;
+        background: #d6336c; color: white; cursor: pointer;
+    }
+    button:hover { background: #b52a57; }
+</style>
+</head>
+<body>
+
+<div id="login">
+    <h1>بازی نقطه‌خط</h1>
+    <p>انتخاب بازیکن:</p>
+    <button onclick="selectPlayer('مهیار')">مهیار</button>
+    <button onclick="selectPlayer('آرام')">آرام</button>
+</div>
+
+<div id="waiting" style="display:none;">
+    <h2>در انتظار بازیکن دیگر...</h2>
+</div>
+
+<div id="game" style="display:none;">
+    <h2 id="turnInfo"></h2>
+    <div id="board"></div>
+    <div>
+        <p>امتیاز مهیار: <span id="scoreM">0</span> | امتیاز آرام: <span id="scoreA">0</span></p>
+        <button onclick="restartGame()">شروع مجدد</button>
+        <button onclick="exitGame()">خروج</button>
+    </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+import { getDatabase, ref, set, update, onValue, remove } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyB-7eEYJd1bfG4l1q42y_xtSQvb6AG4d1g",
+  authDomain: "aram-mahyar.firebaseapp.com",
+  projectId: "aram-mahyar",
+  storageBucket: "aram-mahyar.firebasestorage.app",
+  messagingSenderId: "27948148575",
+  appId: "1:27948148575:web:b4357896d424bd0fe0b8ea",
+  measurementId: "G-5LPNKQ7DD5",
+  databaseURL: "https://aram-mahyar-default-rtdb.firebaseio.com/"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+let playerName = "";
+let turn = "مهیار";
+let scores = { "مهیار": 0, "آرام": 0 };
+
+window.selectPlayer = function(name) {
+    playerName = name;
+    update(ref(db, "players/" + name), { online: true }).then(() => {
+        document.getElementById("login").style.display = "none";
+        document.getElementById("waiting").style.display = "block";
+    });
+    onValue(ref(db, "players"), snap => {
+        let players = snap.val() || {};
+        if (players["مهیار"]?.online && players["آرام"]?.online) {
+            startGame();
+        }
+    });
+};
+
+function startGame() {
+    set(ref(db, "game"), { turn: "مهیار", scores, lines: {} });
+    document.getElementById("waiting").style.display = "none";
+    document.getElementById("game").style.display = "block";
+    renderBoard();
+    listenGame();
+}
+
+function renderBoard() {
+    const size = 4;
+    const boardEl = document.getElementById("board");
+    boardEl.innerHTML = "";
+    for (let r = 0; r < size; r++) {
+        for (let c = 0; c < size; c++) {
+            const dot = document.createElement("div");
+            dot.className = "dot";
+            dot.style.position = "relative";
+            dot.style.display = "inline-block";
+            boardEl.appendChild(dot);
+            if (c < size - 1) {
+                const h = document.createElement("div");
+                h.className = "h-line";
+                h.onclick = () => drawLine(`h-${r}-${c}`);
+                dot.appendChild(h);
+            }
+            if (r < size - 1) {
+                const v = document.createElement("div");
+                v.className = "v-line";
+                v.onclick = () => drawLine(`v-${r}-${c}`);
+                dot.appendChild(v);
+            }
+        }
+        boardEl.appendChild(document.createElement("br"));
+    }
+}
+
+function drawLine(id) {
+    if (turn !== playerName) return;
+    update(ref(db, "game/lines/" + id), { player: playerName });
+}
+
+function listenGame() {
+    onValue(ref(db, "game"), snap => {
+        const game = snap.val();
+        if (!game) return;
+        turn = game.turn;
+        scores = game.scores || scores;
+        document.getElementById("turnInfo").innerText = `نوبت ${turn}`;
+        document.getElementById("scoreM").innerText = scores["مهیار"];
+        document.getElementById("scoreA").innerText = scores["آرام"];
+        document.querySelectorAll(".h-line, .v-line").forEach(line => {
+            line.classList.remove("filled");
+        });
+        for (let key in game.lines) {
+            const [type, r, c] = key.split("-");
+            const index = parseInt(r), col = parseInt(c);
+            const lineEl = document.querySelector(`[onclick="drawLine('${key}')"]`);
+            if (lineEl) lineEl.classList.add("filled");
+        }
+    });
+}
+
+window.restartGame = function() {
+    set(ref(db, "game"), { turn: "مهیار", scores: { "مهیار": 0, "آرام": 0 }, lines: {} });
+};
+
+window.exitGame = function() {
+    update(ref(db, "players/" + playerName), { online: false });
+    remove(ref(db, "game"));
+    location.reload();
+};
+</script>
+</body>
+</html>
