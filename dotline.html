@@ -1,0 +1,142 @@
+<!DOCTYPE html><html lang="fa">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>مهیار ❤️ آرام - بازی نقطه‌خط آنلاین</title>
+<style>
+  body {
+    background: linear-gradient(135deg, #ffdde1, #ee9ca7);
+    font-family: sans-serif;
+    margin: 0;
+    text-align: center;
+  }
+  h1 {
+    color: #fff;
+    font-size: 2em;
+    padding: 20px;
+    margin: 0;
+  }
+  #turn {
+    color: #fff;
+    font-size: 1.2em;
+    margin-bottom: 10px;
+  }
+  canvas {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 0 15px rgba(0,0,0,0.2);
+    margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+  <h1>مهیار ❤️ آرام</h1>
+  <div id="turn">نوبت: مهیار</div>
+  <canvas id="gameCanvas" width="400" height="400"></canvas>
+  <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyB-7eEYJd1bfG4l1q42y_xtSQvb6AG4d1g",
+      authDomain: "aram-mahyar.firebaseapp.com",
+      projectId: "aram-mahyar",
+      storageBucket: "aram-mahyar.firebasestorage.app",
+      messagingSenderId: "27948148575",
+      appId: "1:27948148575:web:b4357896d424bd0fe0b8ea",
+      measurementId: "G-5LPNKQ7DD5",
+      databaseURL: "https://aram-mahyar-default-rtdb.firebaseio.com"
+    };
+    const app = firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const turnDisplay = document.getElementById('turn');
+
+const size = 4;
+const spacing = canvas.width / (size + 1);
+let lines = {};
+let currentTurn = 'مهیار';
+
+function drawBoard() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  for (let i = 0; i <= size; i++) {
+    for (let j = 0; j <= size; j++) {
+      ctx.beginPath();
+      ctx.arc(spacing + i * spacing, spacing + j * spacing, 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#ff4d6d';
+      ctx.fill();
+    }
+  }
+  for (let key in lines) {
+    const [x1, y1, x2, y2] = key.split(',').map(Number);
+    ctx.beginPath();
+    ctx.moveTo(spacing + x1 * spacing, spacing + y1 * spacing);
+    ctx.lineTo(spacing + x2 * spacing, spacing + y2 * spacing);
+    ctx.strokeStyle = '#ff4d6d';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+  }
+}
+
+function handleClick(e) {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  let closestLine = null;
+  let minDist = 10;
+  for (let i = 0; i <= size; i++) {
+    for (let j = 0; j <= size; j++) {
+      if (i < size) {
+        let x1 = spacing + i * spacing, y1 = spacing + j * spacing;
+        let x2 = spacing + (i+1) * spacing, y2 = spacing + j * spacing;
+        let dist = pointLineDistance(x, y, x1, y1, x2, y2);
+        if (dist < minDist && !lines[[i,j,i+1,j]]) closestLine = [i,j,i+1,j];
+      }
+      if (j < size) {
+        let x1 = spacing + i * spacing, y1 = spacing + j * spacing;
+        let x2 = spacing + i * spacing, y2 = spacing + (j+1) * spacing;
+        let dist = pointLineDistance(x, y, x1, y1, x2, y2);
+        if (dist < minDist && !lines[[i,j,i,j+1]]) closestLine = [i,j,i,j+1];
+      }
+    }
+  }
+  if (closestLine) {
+    const key = closestLine.join(',');
+    db.ref('game/lines/' + key).set(true);
+    db.ref('game/turn').set(currentTurn === 'مهیار' ? 'آرام' : 'مهیار');
+  }
+}
+
+function pointLineDistance(px, py, x1, y1, x2, y2) {
+  const A = px - x1;
+  const B = py - y1;
+  const C = x2 - x1;
+  const D = y2 - y1;
+  const dot = A * C + B * D;
+  const len_sq = C * C + D * D;
+  let param = -1;
+  if (len_sq !== 0) param = dot / len_sq;
+  let xx, yy;
+  if (param < 0) { xx = x1; yy = y1; }
+  else if (param > 1) { xx = x2; yy = y2; }
+  else { xx = x1 + param * C; yy = y1 + param * D; }
+  const dx = px - xx;
+  const dy = py - yy;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+db.ref('game/lines').on('value', snapshot => {
+  lines = snapshot.val() || {};
+  drawBoard();
+});
+
+db.ref('game/turn').on('value', snapshot => {
+  currentTurn = snapshot.val() || 'مهیار';
+  turnDisplay.textContent = 'نوبت: ' + currentTurn;
+});
+
+canvas.addEventListener('click', handleClick);
+drawBoard();
+
+  </script>
+</body>
+</html>
