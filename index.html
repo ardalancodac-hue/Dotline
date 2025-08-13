@@ -1,142 +1,170 @@
-<!DOCTYPE html><html lang="fa">
+<!DOCTYPE html>
+<html lang="fa">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>مهیار ❤️ آرام - بازی نقطه‌خط آنلاین</title>
 <style>
-  body {
-    background: linear-gradient(135deg, #ffdde1, #ee9ca7);
-    font-family: sans-serif;
-    margin: 0;
-    text-align: center;
-  }
-  h1 {
-    color: #fff;
-    font-size: 2em;
-    padding: 20px;
-    margin: 0;
-  }
-  #turn {
-    color: #fff;
-    font-size: 1.2em;
-    margin-bottom: 10px;
-  }
-  canvas {
-    background: #fff;
-    border-radius: 10px;
-    box-shadow: 0 0 15px rgba(0,0,0,0.2);
-    margin-top: 10px;
-  }
+    body {
+        background: linear-gradient(to bottom, #ffd6e0, #ffc0cb);
+        font-family: sans-serif;
+        text-align: center;
+        margin: 0;
+        padding: 0;
+    }
+    h1 {
+        color: #fff;
+        margin-top: 20px;
+        font-size: 28px;
+    }
+    h2 {
+        color: #fff;
+        font-size: 18px;
+        margin: 10px 0;
+    }
+    #board {
+        display: grid;
+        margin: 20px auto;
+        background-color: white;
+        border-radius: 15px;
+        padding: 15px;
+        box-shadow: 0px 4px 20px rgba(0,0,0,0.1);
+    }
+    .dot {
+        width: 14px;
+        height: 14px;
+        background-color: black;
+        border-radius: 50%;
+    }
+    .cell {
+        background-color: transparent;
+        border: none;
+        outline: none;
+    }
+    .line-h {
+        border-top: 3px solid transparent;
+        cursor: pointer;
+    }
+    .line-v {
+        border-left: 3px solid transparent;
+        cursor: pointer;
+    }
+    .line-h.active {
+        border-top-color: #ff4d6d;
+    }
+    .line-v.active {
+        border-left-color: #ff4d6d;
+    }
+    .box {
+        background-color: transparent;
+    }
+    .box.taken1 {
+        background-color: rgba(255,77,109,0.3);
+    }
+    .box.taken2 {
+        background-color: rgba(77,136,255,0.3);
+    }
 </style>
-</head>
-<body>
-  <h1>مهیار ❤️ آرام</h1>
-  <div id="turn">نوبت: مهیار</div>
-  <canvas id="gameCanvas" width="400" height="400"></canvas>
-  <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js"></script>
-  <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyB-7eEYJd1bfG4l1q42y_xtSQvb6AG4d1g",
-      authDomain: "aram-mahyar.firebaseapp.com",
-      projectId: "aram-mahyar",
-      storageBucket: "aram-mahyar.firebasestorage.app",
-      messagingSenderId: "27948148575",
-      appId: "1:27948148575:web:b4357896d424bd0fe0b8ea",
-      measurementId: "G-5LPNKQ7DD5",
-      databaseURL: "https://aram-mahyar-default-rtdb.firebaseio.com"
-    };
-    const app = firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-const turnDisplay = document.getElementById('turn');
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, onValue, set, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-const size = 4;
-const spacing = canvas.width / (size + 1);
-let lines = {};
-let currentTurn = 'مهیار';
+const firebaseConfig = {
+  apiKey: "AIzaSyB-7eEYJd1bfG4l1q42y_xtSQvb6AG4d1g",
+  authDomain: "aram-mahyar.firebaseapp.com",
+  projectId: "aram-mahyar",
+  storageBucket: "aram-mahyar.firebasestorage.app",
+  messagingSenderId: "27948148575",
+  appId: "1:27948148575:web:b4357896d424bd0fe0b8ea",
+  measurementId: "G-5LPNKQ7DD5",
+  databaseURL: "https://aram-mahyar-default-rtdb.firebaseio.com/"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+const size = 5;
+let turn = "mahyar";
+let boardState = [];
+
+const boardEl = document.createElement("div");
+boardEl.id = "board";
+boardEl.style.gridTemplateColumns = `repeat(${size*2-1}, 30px)`;
+document.addEventListener("DOMContentLoaded", () => {
+    document.body.appendChild(boardEl);
+    drawBoard();
+    syncWithFirebase();
+});
 
 function drawBoard() {
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  for (let i = 0; i <= size; i++) {
-    for (let j = 0; j <= size; j++) {
-      ctx.beginPath();
-      ctx.arc(spacing + i * spacing, spacing + j * spacing, 5, 0, Math.PI * 2);
-      ctx.fillStyle = '#ff4d6d';
-      ctx.fill();
+    boardState = [];
+    for (let r = 0; r < size*2-1; r++) {
+        boardState[r] = [];
+        for (let c = 0; c < size*2-1; c++) {
+            let el = document.createElement("div");
+            if (r % 2 === 0 && c % 2 === 0) {
+                el.className = "dot";
+            } else if (r % 2 === 0 && c % 2 === 1) {
+                el.className = "line-h cell";
+                el.addEventListener("click", () => clickLine(r, c, "h"));
+            } else if (r % 2 === 1 && c % 2 === 0) {
+                el.className = "line-v cell";
+                el.addEventListener("click", () => clickLine(r, c, "v"));
+            } else {
+                el.className = "box cell";
+            }
+            boardEl.appendChild(el);
+            boardState[r][c] = "";
+        }
     }
-  }
-  for (let key in lines) {
-    const [x1, y1, x2, y2] = key.split(',').map(Number);
-    ctx.beginPath();
-    ctx.moveTo(spacing + x1 * spacing, spacing + y1 * spacing);
-    ctx.lineTo(spacing + x2 * spacing, spacing + y2 * spacing);
-    ctx.strokeStyle = '#ff4d6d';
-    ctx.lineWidth = 4;
-    ctx.stroke();
-  }
 }
 
-function handleClick(e) {
-  const rect = canvas.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-  let closestLine = null;
-  let minDist = 10;
-  for (let i = 0; i <= size; i++) {
-    for (let j = 0; j <= size; j++) {
-      if (i < size) {
-        let x1 = spacing + i * spacing, y1 = spacing + j * spacing;
-        let x2 = spacing + (i+1) * spacing, y2 = spacing + j * spacing;
-        let dist = pointLineDistance(x, y, x1, y1, x2, y2);
-        if (dist < minDist && !lines[[i,j,i+1,j]]) closestLine = [i,j,i+1,j];
-      }
-      if (j < size) {
-        let x1 = spacing + i * spacing, y1 = spacing + j * spacing;
-        let x2 = spacing + i * spacing, y2 = spacing + (j+1) * spacing;
-        let dist = pointLineDistance(x, y, x1, y1, x2, y2);
-        if (dist < minDist && !lines[[i,j,i,j+1]]) closestLine = [i,j,i,j+1];
-      }
+function clickLine(r, c, type) {
+    if (boardState[r][c] !== "") return;
+    boardState[r][c] = turn;
+    updateBoardUI();
+    saveToFirebase();
+    turn = turn === "mahyar" ? "aram" : "mahyar";
+}
+
+function updateBoardUI() {
+    const cells = boardEl.children;
+    let i = 0;
+    for (let r = 0; r < size*2-1; r++) {
+        for (let c = 0; c < size*2-1; c++) {
+            const el = cells[i];
+            if (boardState[r][c] !== "") {
+                if (el.classList.contains("line-h")) el.classList.add("active");
+                if (el.classList.contains("line-v")) el.classList.add("active");
+            }
+            i++;
+        }
     }
-  }
-  if (closestLine) {
-    const key = closestLine.join(',');
-    db.ref('game/lines/' + key).set(true);
-    db.ref('game/turn').set(currentTurn === 'مهیار' ? 'آرام' : 'مهیار');
-  }
 }
 
-function pointLineDistance(px, py, x1, y1, x2, y2) {
-  const A = px - x1;
-  const B = py - y1;
-  const C = x2 - x1;
-  const D = y2 - y1;
-  const dot = A * C + B * D;
-  const len_sq = C * C + D * D;
-  let param = -1;
-  if (len_sq !== 0) param = dot / len_sq;
-  let xx, yy;
-  if (param < 0) { xx = x1; yy = y1; }
-  else if (param > 1) { xx = x2; yy = y2; }
-  else { xx = x1 + param * C; yy = y1 + param * D; }
-  const dx = px - xx;
-  const dy = py - yy;
-  return Math.sqrt(dx * dx + dy * dy);
+function saveToFirebase() {
+    set(ref(db, "game"), {
+        boardState,
+        turn
+    });
 }
 
-db.ref('game/lines').on('value', snapshot => {
-  lines = snapshot.val() || {};
-  drawBoard();
-});
-
-db.ref('game/turn').on('value', snapshot => {
-  currentTurn = snapshot.val() || 'مهیار';
-  turnDisplay.textContent = 'نوبت: ' + currentTurn;
-});
-
-canvas.addEventListener('click', handleClick);
-drawBoard();
-
-  </script>
+function syncWithFirebase() {
+    const gameRef = ref(db, "game");
+    onValue(gameRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+            boardState = data.boardState;
+            turn = data.turn;
+            updateBoardUI();
+            document.querySelector("h2").textContent = `نوبت: ${turn === "mahyar" ? "مهیار" : "آرام"}`;
+        }
+    });
+}
+</script>
+</head>
+<body>
+<h1>مهیار ❤️ آرام</h1>
+<h2>نوبت: مهیار</h2>
 </body>
 </html>
