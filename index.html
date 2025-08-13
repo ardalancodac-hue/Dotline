@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مهیار ❤️ آرام - نقطه‌خط آنلاین</title>
+<style>
+    body {
+        background: linear-gradient(to bottom, #ffd6e0, #ffc0cb);
+        font-family: sans-serif;
+        text-align: center;
+        margin: 0;
+    }
+    h1 {
+        color: #fff;
+        margin-top: 20px;
+        font-size: 28px;
+    }
+    h2, h3 {
+        color: #fff;
+    }
+    #board {
+        display: grid;
+        margin: 20px auto;
+        background-color: white;
+        border-radius: 15px;
+        padding: 15px;
+        box-shadow: 0px 4px 20px rgba(0,0,0,0.1);
+    }
+    .dot {
+        width: 14px;
+        height: 14px;
+        background-color: black;
+        border-radius: 50%;
+    }
+    .cell {
+        background-color: transparent;
+        border: none;
+    }
+    .line-h {
+        border-top: 3px solid transparent;
+        cursor: pointer;
+    }
+    .line-v {
+        border-left: 3px solid transparent;
+        cursor: pointer;
+    }
+    .line-h.active {
+        border-top-color: #ff4d6d;
+    }
+    .line-v.active {
+        border-left-color: #ff4d6d;
+    }
+    .box.taken1 {
+        background-color: rgba(255,77,109,0.3);
+    }
+    .box.taken2 {
+        background-color: rgba(77,136,255,0.3);
+    }
+    #controls button {
+        margin: 5px;
+        padding: 8px 14px;
+        font-size: 14px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+    }
+    #role-select {
+        margin-top: 40px;
+    }
+</style>
+</head>
+<body>
+<h1>مهیار ❤️ آرام</h1>
+<div id="role-select">
+    <h2>انتخاب بازیکن</h2>
+    <button onclick="chooseRole('mahyar')">من مهیارم</button>
+    <button onclick="chooseRole('aram')">من آرامم</button>
+</div>
+<div id="ready-section" style="display:none;">
+    <h2 id="role-display"></h2>
+    <button onclick="setReady()">آماده</button>
+</div>
+<div id="game-section" style="display:none;">
+    <h2 id="turn-display"></h2>
+    <h3>امتیاز مهیار: <span id="score-mahyar">0</span> | امتیاز آرام: <span id="score-aram">0</span></h3>
+    <div id="board"></div>
+    <div id="controls">
+        <button onclick="restartGame()">شروع مجدد</button>
+        <button onclick="exitGame()">خروج</button>
+    </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, onValue, set, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyB-7eEYJd1bfG4l1q42y_xtSQvb6AG4d1g",
+  authDomain: "aram-mahyar.firebaseapp.com",
+  projectId: "aram-mahyar",
+  storageBucket: "aram-mahyar.firebasestorage.app",
+  messagingSenderId: "27948148575",
+  appId: "1:27948148575:web:b4357896d424bd0fe0b8ea",
+  measurementId: "G-5LPNKQ7DD5",
+  databaseURL: "https://aram-mahyar-default-rtdb.firebaseio.com/"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+const size = 5;
+let role = null;
+let turn = "mahyar";
+let boardState = [];
+let scores = {mahyar:0, aram:0};
+let readyStatus = {mahyar:false, aram:false};
+
+const boardEl = document.getElementById("board");
+
+function chooseRole(selected) {
+    role = selected;
+    document.getElementById("role-select").style.display = "none";
+    document.getElementById("ready-section").style.display = "block";
+    document.getElementById("role-display").textContent = `شما: ${role === "mahyar" ? "مهیار" : "آرام"}`;
+}
+
+function setReady() {
+    update(ref(db, "ready"), {[role]: true});
+}
+
+function startGameIfReady() {
+    if (readyStatus.mahyar && readyStatus.aram) {
+        document.getElementById("ready-section").style.display = "none";
+        document.getElementById("game-section").style.display = "block";
+        drawBoard();
+    }
+}
+
+function drawBoard() {
+    boardEl.innerHTML = "";
+    boardEl.style.gridTemplateColumns = `repeat(${size*2-1}, 30px)`;
+    for (let r = 0; r < size*2-1; r++) {
+        boardState[r] = [];
+        for (let c = 0; c < size*2-1; c++) {
+            let el = document.createElement("div");
+            if (r % 2 === 0 && c % 2 === 0) {
+                el.className = "dot";
+            } else if (r % 2 === 0 && c % 2 === 1) {
+                el.className = "line-h cell";
+                el.addEventListener("click", () => clickLine(r, c, "h"));
+            } else if (r % 2 === 1 && c % 2 === 0) {
+                el.className = "line-v cell";
+                el.addEventListener("click", () => clickLine(r, c, "v"));
+            } else {
+                el.className = "box cell";
+            }
+            boardEl.appendChild(el);
+            boardState[r][c] = "";
+        }
+    }
+}
+
+function clickLine(r, c, type) {
+    if (turn !== role || boardState[r][c] !== "") return;
+    boardState[r][c] = role;
+    let madeSquare = checkSquares(r, c, role, type);
+    if (madeSquare > 0) {
+        scores[role] += madeSquare;
+    } else {
+        turn = turn === "mahyar" ? "aram" : "mahyar";
+    }
+    saveGame();
+}
+
+function checkSquares(r, c, player, type) {
+    let completed = 0;
+    const checkBox = (br, bc) => {
+        if (br < 0 || bc < 0 || br >= size-1 || bc >= size-1) return false;
+        const top = boardState[br*2][bc*2+1] !== "";
+        const bottom = boardState[br*2+2][bc*2+1] !== "";
+        const left = boardState[br*2+1][bc*2] !== "";
+        const right = boardState[br*2+1][bc*2+2] !== "";
+        if (top && bottom && left && right) {
+            boardState[br*2+1][bc*2+1] = player;
+            return true;
+        }
+        return false;
+    };
+    if (type === "h") {
+        if (checkBox(Math.floor(r/2)-1, Math.floor(c/2))) completed++;
+        if (checkBox(Math.floor(r/2), Math.floor(c/2))) completed++;
+    } else {
+        if (checkBox(Math.floor(r/2), Math.floor(c/2)-1)) completed++;
+        if (checkBox(Math.floor(r/2), Math.floor(c/2))) completed++;
+    }
+    return completed;
+}
+
+function updateBoardUI() {
+    const cells = boardEl.children;
+    let i = 0;
+    for (let r = 0; r < size*2-1; r++) {
+        for (let c = 0; c < size*2-1; c++) {
+            const el = cells[i];
+            if (boardState[r][c] !== "") {
+                if (el.classList.contains("line-h")) el.classList.add("active");
+                if (el.classList.contains("line-v")) el.classList.add("active");
+                if (el.classList.contains("box")) {
+                    el.classList.toggle("taken1", boardState[r][c] === "mahyar");
+                    el.classList.toggle("taken2", boardState[r][c] === "aram");
+                }
+            }
+            i++;
+        }
+    }
+    document.getElementById("turn-display").textContent = `نوبت: ${turn === "mahyar" ? "مهیار" : "آرام"}`;
+    document.getElementById("score-mahyar").textContent = scores.mahyar;
+    document.getElementById("score-aram").textContent = scores.aram;
+}
+
+function saveGame() {
+    set(ref(db, "game"), {boardState, turn, scores});
+}
+
+function restartGame() {
+    scores = {mahyar:0, aram:0};
+    turn = "mahyar";
+    drawBoard();
+    saveGame();
+}
+
+function exitGame() {
+    role = null;
+    update(ref(db, "ready"), {mahyar:false, aram:false});
+    document.getElementById("game-section").style.display = "none";
+    document.getElementById("role-select").style.display = "block";
+}
+
+onValue(ref(db, "ready"), (snapshot) => {
+    if (snapshot.val()) {
+        readyStatus = snapshot.val();
+        startGameIfReady();
+    }
+});
+
+onValue(ref(db, "game"), (snapshot) => {
+    if (snapshot.val()) {
+        boardState = snapshot.val().boardState;
+        turn = snapshot.val().turn;
+        scores = snapshot.val().scores;
+        updateBoardUI();
+    }
+});
+
+// دسترسی توابع به window برای کارکرد دکمه‌ها
+window.chooseRole = chooseRole;
+window.setReady = setReady;
+window.restartGame = restartGame;
+window.exitGame = exitGame;
+</script>
+</body>
+</html>
