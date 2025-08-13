@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+<meta charset="UTF-8">
+<title>نقطه‌خط مهیار و آرام ❤️</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: linear-gradient(to bottom right, #ffb6c1, #ff69b4);
+        text-align: center;
+        margin: 0;
+        padding: 0;
+        direction: rtl;
+    }
+    h1 {
+        color: white;
+        margin-top: 20px;
+    }
+    #login, #waiting, #game {
+        display: none;
+    }
+    button {
+        padding: 10px 20px;
+        font-size: 18px;
+        margin: 10px;
+        border: none;
+        border-radius: 10px;
+        background-color: white;
+        cursor: pointer;
+    }
+    canvas {
+        background: white;
+        margin-top: 20px;
+        border: 2px solid #ff69b4;
+    }
+    #score {
+        font-size: 20px;
+        margin-top: 10px;
+        color: white;
+    }
+</style>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyB-7eEYJd1bfG4l1q42y_xtSQvb6AG4d1g",
+  authDomain: "aram-mahyar.firebaseapp.com",
+  projectId: "aram-mahyar",
+  storageBucket: "aram-mahyar.firebasestorage.app",
+  messagingSenderId: "27948148575",
+  appId: "1:27948148575:web:b4357896d424bd0fe0b8ea",
+  measurementId: "G-5LPNKQ7DD5",
+  databaseURL: "https://aram-mahyar-default-rtdb.firebaseio.com/"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+let playerName = "";
+let currentTurn = "";
+let board = [];
+let scores = { "مهیار": 0, "آرام": 0 };
+let gridSize = 4;
+let cellSize = 80;
+
+// نمایش انتخاب بازیکن
+document.addEventListener("DOMContentLoaded", () => {
+    document.getElementById("login").style.display = "block";
+});
+
+window.selectPlayer = function(name) {
+    playerName = name;
+    update(ref(db, "players/" + name), { online: true });
+    document.getElementById("login").style.display = "none";
+    document.getElementById("waiting").style.display = "block";
+
+    onValue(ref(db, "players"), snapshot => {
+        let players = snapshot.val() || {};
+        if (players["مهیار"]?.online && players["آرام"]?.online) {
+            startGame();
+        }
+    });
+};
+
+function startGame() {
+    document.getElementById("waiting").style.display = "none";
+    document.getElementById("game").style.display = "block";
+    initBoard();
+    onValue(ref(db, "game"), snapshot => {
+        let data = snapshot.val();
+        if (data) {
+            board = data.board;
+            currentTurn = data.turn;
+            scores = data.scores;
+            drawBoard();
+            updateScore();
+        }
+    });
+    if (!currentTurn) {
+        resetGame();
+    }
+}
+
+function initBoard() {
+    board = [];
+    for (let r = 0; r < gridSize; r++) {
+        board[r] = [];
+        for (let c = 0; c < gridSize; c++) {
+            board[r][c] = { top: false, right: false, bottom: false, left: false, owner: "" };
+        }
+    }
+}
+
+function resetGame() {
+    initBoard();
+    scores = { "مهیار": 0, "آرام": 0 };
+    currentTurn = "مهیار";
+    set(ref(db, "game"), { board, scores, turn: currentTurn });
+}
+
+window.makeMove = function(row, col, side) {
+    if (currentTurn !== playerName) return;
+    if (board[row][col][side]) return;
+    board[row][col][side] = true;
+    let gotSquare = false;
+
+    if (side === "top" && row > 0) {
+        board[row-1][col].bottom = true;
+    } else if (side === "bottom" && row < gridSize-1) {
+        board[row+1][col].top = true;
+    } else if (side === "left" && col > 0) {
+        board[row][col-1].right = true;
+    } else if (side === "right" && col < gridSize-1) {
+        board[row][col+1].left = true;
+    }
+
+    if (isSquareComplete(row, col)) {
+        board[row][col].owner = playerName;
+        scores[playerName]++;
+        gotSquare = true;
+    }
+    if (side === "top" && row > 0 && isSquareComplete(row-1, col)) {
+        board[row-1][col].owner = playerName;
+        scores[playerName]++;
+        gotSquare = true;
+    }
+    if (!gotSquare) {
+        currentTurn = (currentTurn === "مهیار") ? "آرام" : "مهیار";
+    }
+    update(ref(db, "game"), { board, scores, turn: currentTurn });
+}
+
+function isSquareComplete(row, col) {
+    let cell = board[row][col];
+    return cell.top && cell.right && cell.bottom && cell.left;
+}
+
+function drawBoard() {
+    let canvas = document.getElementById("board");
+    let ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.lineWidth = 2;
+
+    for (let r = 0; r < gridSize; r++) {
+        for (let c = 0; c < gridSize; c++) {
+            let x = c * cellSize;
+            let y = r * cellSize;
+
+            ctx.beginPath();
+            ctx.arc(x, y, 5, 0, Math.PI*2);
+            ctx.fill();
+
+            if (board[r][c].top) { ctx.moveTo(x, y); ctx.lineTo(x+cellSize, y); }
+            if (board[r][c].right) { ctx.moveTo(x+cellSize, y); ctx.lineTo(x+cellSize, y+cellSize); }
+            if (board[r][c].bottom) { ctx.moveTo(x, y+cellSize); ctx.lineTo(x+cellSize, y+cellSize); }
+            if (board[r][c].left) { ctx.moveTo(x, y); ctx.lineTo(x, y+cellSize); }
+            ctx.stroke();
+
+            if (board[r][c].owner) {
+                ctx.fillStyle = board[r][c].owner === "مهیار" ? "#ff69b4" : "#87ceeb";
+                ctx.fillRect(x+5, y+5, cellSize-10, cellSize-10);
+                ctx.fillStyle = "black";
+            }
+        }
+    }
+}
+
+function updateScore() {
+    document.getElementById("score").innerText = `امتیاز مهیار: ${scores["مهیار"]} | امتیاز آرام: ${scores["آرام"]} | نوبت: ${currentTurn}`;
+}
+
+window.exitGame = function() {
+    update(ref(db, "players/" + playerName), { online: false });
+    location.reload();
+}
+
+window.restartGame = function() {
+    resetGame();
+}
+</script>
+</head>
+<body>
+<h1>بازی نقطه‌خط مهیار ❤️ آرام</h1>
+
+<div id="login">
+    <p>انتخاب کن:</p>
+    <button onclick="selectPlayer('مهیار')">مهیار</button>
+    <button onclick="selectPlayer('آرام')">آرام</button>
+</div>
+
+<div id="waiting">
+    <p>منتظر بازیکن دیگر...</p>
+</div>
+
+<div id="game">
+    <canvas id="board" width="320" height="320"></canvas>
+    <div id="score"></div>
+    <button onclick="restartGame()">شروع مجدد</button>
+    <button onclick="exitGame()">خروج</button>
+</div>
+
+</body>
+</html>
